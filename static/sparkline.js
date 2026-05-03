@@ -1,8 +1,10 @@
 /* pd-system-monitor sparklines.
-   Listens on the body-level SSE EventSource (set up by the dashboard shell)
-   for "system-monitor-update" events, maintains per-metric ring buffers in
-   localStorage, and renders compact inline SVG polylines into elements with
-   class .pd-sysmon-spark and a data-metric attribute.
+   Subscribes to "system-monitor-update" events via the dashboard shell's
+   PD.SSE helper (shared visibility-aware EventSource — see
+   personal-dashboard/docs/knowledge/plugin-sse-from-js.md), maintains
+   per-metric ring buffers in localStorage, and renders compact inline SVG
+   polylines into elements with class .pd-sysmon-spark and a data-metric
+   attribute.
 
    Buffer: 60 samples per metric (5 min @ 5s cadence). ~5 KB total.
 */
@@ -101,13 +103,12 @@
   let buffers = loadBuffers();
   renderAll(buffers);
 
-  // Open our own EventSource. The dashboard's body already has one (managed
-  // by htmx-ext-sse) but its message routing only fires events on subscribed
-  // elements; the detail page has no element subscribed to
-  // "system-monitor-update". A separate EventSource is the clean way to get
-  // direct access to the JSON payload here.
-  const sse = new EventSource("/events");
-  sse.addEventListener("system-monitor-update", function (evt) {
+  if (!window.PD || !window.PD.SSE || typeof window.PD.SSE.on !== "function") {
+    console.warn("[pd-sysmon-spark] PD.SSE not available; sparklines won't update live");
+    return;
+  }
+
+  PD.SSE.on("system-monitor-update", function (evt) {
     let payload;
     try {
       payload = JSON.parse(evt.data);
@@ -126,9 +127,5 @@
       saveBuffers(buffers);
       renderAll(buffers);
     }
-  });
-
-  window.addEventListener("beforeunload", function () {
-    try { sse.close(); } catch (e) { /* ignore */ }
   });
 })();

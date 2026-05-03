@@ -6,3 +6,6 @@ __pycache__/
 
 # Local-only docs
 docs/knowledge/
+
+# Local-only handoff state
+.claude/
