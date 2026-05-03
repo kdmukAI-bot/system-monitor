@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}System Monitor · Personal Dashboard{% endblock %}
+{% block content %}
+{% set sev = data.severities %}
+{% set ram = data.ram %}
+{% set swap = data.swap %}
+{% set disk = data.disk %}
+{% set live = data.ups.live %}
+{% set sd = data.systemd %}
+{% set gpu0 = data.gpu.gpus[0] if data.gpu.gpus else None %}
+<section class="pd-page pd-sysmon-detail">
+
+  <h2>System Monitor</h2>
+  <p class="pd-sysmon-status pd-sysmon-status-{{ sev.overall }}">
+    <span class="pd-sysmon-dot pd-sysmon-dot-{{ sev.overall }}"></span>
+    {{ data.summary_text }}
+  </p>
+
+  <h3>RAM &amp; Swap</h3>
+  <table class="pd-sysmon-table">
+    <tr class="pd-sysmon-row-{{ sev.ram }}">
+      <th>RAM</th>
+      <td>{{ '%.1f' % ram.percent }}%</td>
+      <td>{{ '%.2f' % (ram.used_bytes / 1073741824) }} / {{ '%.2f' % (ram.total_bytes / 1073741824) }} GiB</td>
+      <td>avail {{ '%.2f' % (ram.available_bytes / 1073741824) }} GiB</td>
+      <td><span class="pd-sysmon-spark" data-metric="ram_pct"></span></td>
+    </tr>
+    <tr class="pd-sysmon-row-{{ sev.swap }}">
+      <th>Swap</th>
+      <td>{{ '%.1f' % swap.percent }}%</td>
+      <td>{{ '%.2f' % (swap.used_bytes / 1073741824) }} / {{ '%.2f' % (swap.total_bytes / 1073741824) }} GiB</td>
+      <td></td>
+      <td><span class="pd-sysmon-spark" data-metric="swap_pct"></span></td>
+    </tr>
+  </table>
+
+  {% if data.top_processes %}
+  <h4>Top processes by RSS</h4>
+  <table class="pd-sysmon-table">
+    <thead><tr><th>PID</th><th>Name</th><th>RSS</th></tr></thead>
+    <tbody>
+      {% for p in data.top_processes %}
+      <tr>
+        <td>{{ p.pid }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ '%.1f' % (p.rss_bytes / 1073741824) }} GiB</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3>Disk</h3>
+  <table class="pd-sysmon-table">
+    <tr class="pd-sysmon-row-{{ sev.disk }}">
+      <th>{{ disk.mountpoint }}</th>
+      <td>{{ '%.1f' % disk.percent }}% used</td>
+      <td>{{ '%.0f' % (disk.used_bytes / 1073741824) }} / {{ '%.0f' % (disk.total_bytes / 1073741824) }} GiB</td>
+      <td>{{ '%.0f' % (disk.free_bytes / 1073741824) }} GiB free</td>
+      <td><span class="pd-sysmon-spark" data-metric="disk_pct"></span></td>
+    </tr>
+  </table>
+
+  <h3>GPU</h3>
+  {% if gpu0 %}
+  <table class="pd-sysmon-table">
+    <thead>
+      <tr><th>GPU</th><th>VRAM</th><th>Temp</th><th>Util</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for g in data.gpu.gpus %}
+      <tr class="pd-sysmon-row-{{ sev.vram if loop.first else 'ok' }}">
+        <td>{{ g.name }}</td>
+        <td>
+          {{ '%.1f' % g.vram_percent }}% ·
+          {{ g.vram_used_bytes // 1048576 }}/{{ g.vram_total_bytes // 1048576 }} MiB
+        </td>
+        <td>{% if g.temp_c is not none %}{{ g.temp_c }}°C{% else %}—{% endif %}</td>
+        <td>{% if g.util_percent is not none %}{{ g.util_percent }}%{% else %}—{% endif %}</td>
+        <td>{% if loop.first %}<span class="pd-sysmon-spark" data-metric="vram_pct"></span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="pd-empty">No NVIDIA GPU detected (or <code>nvidia-smi</code> not available).</p>
+  {% endif %}
+
+  <h3>CPU temperature &amp; load</h3>
+  <p>
+    {% if data.cpu_temp_c is not none %}CPU temp: {{ '%.1f' % data.cpu_temp_c }}°C ·{% endif %}
+    load: {{ '%.2f' % data.load_avg['1m'] }} (1m) ·
+    {{ '%.2f' % data.load_avg['5m'] }} (5m) ·
+    {{ '%.2f' % data.load_avg['15m'] }} (15m)
+    <span class="pd-sysmon-spark" data-metric="load1"></span>
+  </p>
+
+  <h3>UPS</h3>
+  {% if live.available %}
+  <table class="pd-sysmon-table">
+    <tr class="pd-sysmon-row-{{ sev.ups }}">
+      <th>Status</th>
+      <td colspan="3">
+        <span class="pd-sysmon-dot pd-sysmon-dot-{{ sev.ups }}"></span>
+        {{ live.status_label }} ({{ live.status_raw }})
+      </td>
+    </tr>
+    <tr><th>Device</th><td colspan="3">{{ live.device_mfr }} {{ live.device_model }}</td></tr>
+    {% if live.charge_pct is not none %}
+    <tr>
+      <th>Battery</th>
+      <td>{{ '%.0f' % live.charge_pct }}%</td>
+      <td>
+        {% if live.runtime_seconds is not none %}
+          ~{{ '%dh%02dm' % (live.runtime_seconds // 3600, (live.runtime_seconds % 3600) // 60) if live.runtime_seconds >= 3600 else '%dm' % (live.runtime_seconds // 60) }} runtime
+        {% endif %}
+      </td>
+      <td>
+        {% if live.battery_voltage is not none %}{{ '%.1f' % live.battery_voltage }} V{% endif %}
+        {% if live.battery_voltage_nominal is not none %} (nom {{ '%.0f' % live.battery_voltage_nominal }} V){% endif %}
+      </td>
+    </tr>
+    {% endif %}
+    {% if live.load_pct is not none %}
+    <tr>
+      <th>Load</th>
+      <td>{{ '%.0f' % live.load_pct }}%</td>
+      <td>
+        {% if live.realpower_watts is not none %}{{ '%.0f' % live.realpower_watts }} W{% endif %}
+        {% if live.realpower_nominal_watts is not none %} of {{ '%.0f' % live.realpower_nominal_watts }} W nominal{% endif %}
+      </td>
+      <td><span class="pd-sysmon-spark" data-metric="ups_load_pct"></span></td>
+    </tr>
+    {% endif %}
+    {% if live.input_volts is not none or live.output_volts is not none %}
+    <tr>
+      <th>Voltage</th>
+      <td colspan="3">
+        {% if live.input_volts is not none %}in {{ '%.0f' % live.input_volts }} V{% endif %}
+        {% if live.output_volts is not none %} · out {{ '%.0f' % live.output_volts }} V{% endif %}
+      </td>
+    </tr>
+    {% endif %}
+    {% if live.test_result %}
+    <tr>
+      <th>Last self-test</th>
+      <td colspan="3">{{ live.test_result }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if data.ups.recent_events %}
+  <h4>Recent events ({{ data.ups.recent_events | length }})</h4>
+  <table class="pd-sysmon-table pd-sysmon-events">
+    <thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for ev in data.ups.recent_events | reverse %}
+      <tr>
+        <td><time datetime="{{ ev.ts }}" title="{{ ev.ts }}">{{ ev.ts | time_ago }}</time></td>
+        <td><code>{{ ev.event }}</code></td>
+        <td>
+          {% if ev.result %}{{ ev.result }}{% endif %}
+          {% if ev.charge is not none %}charge {{ ev.charge }}%{% endif %}
+          {% if ev.runtime is not none %} · runtime {{ ev.runtime }}s{% endif %}
+          {% if ev.input is not none %} · in {{ ev.input }}V{% endif %}
+          {% if ev.output is not none %} · out {{ ev.output }}V{% endif %}
+          {% if ev.load is not none %} · load {{ ev.load }}%{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <details class="pd-sysmon-raw">
+    <summary>Raw <code>upsc</code> output</summary>
+    <pre>{% for k, v in live.raw.items() | sort %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+  </details>
+  {% else %}
+  <p class="pd-empty">UPS unavailable: {{ live.error or 'unknown error' }}</p>
+  {% endif %}
+
+  <h3>systemd <code>--user</code> services</h3>
+  {% if sd.units %}
+  <table class="pd-sysmon-table">
+    <thead><tr><th>Unit</th><th>Active</th><th>Sub</th><th>Description</th></tr></thead>
+    <tbody>
+      {% for u in sd.units %}
+      <tr class="pd-sysmon-row-{{ 'critical' if u.active == 'failed' else 'ok' if u.active == 'active' else 'warning' }}">
+        <td><code>{{ u.unit }}</code></td>
+        <td>{{ u.active }}</td>
+        <td>{{ u.sub }}</td>
+        <td>{{ u.description }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="pd-empty">No user-installed systemd services found.</p>
+  {% endif %}
+
+  <footer class="pd-sysmon-footer">
+    {% if data.occurred_at %}
+    <time datetime="{{ data.occurred_at }}" title="{{ data.occurred_at }}">refreshed {{ data.occurred_at | time_ago }}</time>
+    {% endif %}
+  </footer>
+</section>
+
+<script src="/static/system-monitor/sparkline.js"></script>
+{% endblock %}

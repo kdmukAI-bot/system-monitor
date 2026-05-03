@@ -1,0 +1,25 @@
+enabled = true
+notification_policy = "warning_and_above"
+
+[schedule]
+type = "interval"
+seconds = 5
+
+[thresholds]
+ram_warn_pct = 90
+ram_crit_pct = 95
+swap_warn_pct = 50
+disk_warn_pct = 90
+disk_crit_pct = 95
+vram_warn_pct = 95
+sustained_seconds = 120
+
+[ups]
+device = "cyberpower@localhost"
+event_log = "/var/log/ups-events.log"
+
+[systemd]
+# Watchset is auto-built from ~/.config/systemd/user/*.service.
+# Add system-level units here to additionally monitor them, e.g.:
+# extra_units = ["nut-server.service", "nut-monitor.service"]
+extra_units = []

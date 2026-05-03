@@ -1,0 +1,97 @@
+{% set ram = data.ram %}
+{% set disk = data.disk %}
+{% set sev = data.severities %}
+{% set live = data.ups.live %}
+{% set sd = data.systemd.summary %}
+{% set gpu0 = data.gpu.gpus[0] if data.gpu.gpus else None %}
+<div hx-get="/modules/system-monitor/widget"
+     hx-trigger="sse:system-monitor-update from:body"
+     hx-swap="outerHTML">
+  <h2><a href="/modules/system-monitor/">System Monitor</a></h2>
+
+  <ul class="pd-sysmon-bars">
+    <li class="pd-sysmon-bar pd-sysmon-bar-{{ sev.ram }}">
+      <span class="pd-sysmon-label">RAM</span>
+      <div class="pd-sysmon-track">
+        <div class="pd-sysmon-fill pd-sysmon-fill-{{ sev.ram }}"
+             style="width: {{ '%.1f' % ram.percent }}%"></div>
+      </div>
+      <span class="pd-sysmon-readout">
+        {{ '%.0f' % ram.percent }}% ·
+        {{ '%.1f' % (ram.used_bytes / 1073741824) }}/{{ '%.0f' % (ram.total_bytes / 1073741824) }} GiB
+      </span>
+    </li>
+
+    {% if gpu0 %}
+    <li class="pd-sysmon-bar pd-sysmon-bar-{{ sev.vram }}">
+      <span class="pd-sysmon-label">VRAM</span>
+      <div class="pd-sysmon-track">
+        <div class="pd-sysmon-fill pd-sysmon-fill-{{ sev.vram }}"
+             style="width: {{ '%.1f' % gpu0.vram_percent }}%"></div>
+      </div>
+      <span class="pd-sysmon-readout">
+        {{ '%.0f' % gpu0.vram_percent }}% ·
+        {{ (gpu0.vram_used_bytes // 1048576) }}/{{ (gpu0.vram_total_bytes // 1048576) }} MiB
+      </span>
+    </li>
+    {% endif %}
+
+    <li class="pd-sysmon-bar pd-sysmon-bar-{{ sev.disk }}">
+      <span class="pd-sysmon-label">Disk</span>
+      <div class="pd-sysmon-track">
+        <div class="pd-sysmon-fill pd-sysmon-fill-{{ sev.disk }}"
+             style="width: {{ '%.1f' % disk.percent }}%"></div>
+      </div>
+      <span class="pd-sysmon-readout">
+        {{ '%.0f' % disk.percent }}% ·
+        {{ '%.0f' % (disk.free_bytes / 1073741824) }} GiB free
+      </span>
+    </li>
+
+    <li class="pd-sysmon-bar pd-sysmon-bar-{{ sev.ups }}">
+      <span class="pd-sysmon-label">UPS</span>
+      {% if live.available %}
+        <span class="pd-sysmon-ups-status">
+          <span class="pd-sysmon-dot pd-sysmon-dot-{{ sev.ups }}"></span>
+          {{ live.status_label }}
+        </span>
+        <span class="pd-sysmon-readout">
+          {% if live.charge_pct is not none %}{{ '%.0f' % live.charge_pct }}%{% endif %}
+          {% if live.runtime_seconds is not none %}
+            · ~{{ '%dh%02dm' % (live.runtime_seconds // 3600, (live.runtime_seconds % 3600) // 60) if live.runtime_seconds >= 3600 else '%dm' % (live.runtime_seconds // 60) }}
+          {% endif %}
+          {% if live.load_pct is not none %} · load {{ '%.0f' % live.load_pct }}%{% endif %}
+        </span>
+      {% else %}
+        <span class="pd-sysmon-ups-status pd-sysmon-muted">unavailable</span>
+      {% endif %}
+    </li>
+
+    <li class="pd-sysmon-bar pd-sysmon-bar-{{ sev.systemd }}">
+      <span class="pd-sysmon-label">Services</span>
+      <span class="pd-sysmon-svc-status">
+        <span class="pd-sysmon-dot pd-sysmon-dot-{{ sev.systemd }}"></span>
+        {% if sd.failed %}
+          {{ sd.active }}/{{ sd.total }} active · {{ sd.failed }} failed:
+          {% for u in data.systemd.units if u.active == "failed" %}
+            <code>{{ u.unit }}</code>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        {% else %}
+          {{ sd.active }}/{{ sd.total }} active
+        {% endif %}
+      </span>
+    </li>
+  </ul>
+
+  <p class="pd-sysmon-loadavg">
+    load: {{ '%.2f' % data.load_avg['1m'] }} ·
+    {{ '%.2f' % data.load_avg['5m'] }} ·
+    {{ '%.2f' % data.load_avg['15m'] }}
+  </p>
+
+  {% if data.occurred_at %}
+  <footer class="pd-sysmon-footer">
+    <time datetime="{{ data.occurred_at }}" title="{{ data.occurred_at }}">refreshed {{ data.occurred_at | time_ago }}</time>
+  </footer>
+  {% endif %}
+</div>

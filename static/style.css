@@ -1,0 +1,185 @@
+.pd-sysmon-bars {
+  list-style: none;
+  padding: 0;
+  margin: 0.5em 0 0.4em 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4em;
+}
+.pd-sysmon-bar {
+  display: grid;
+  grid-template-columns: 4.5em 1fr auto;
+  align-items: center;
+  gap: 0.6em;
+  font-size: 0.92em;
+}
+.pd-sysmon-label {
+  color: var(--pd-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pd-sysmon-track {
+  height: 0.7em;
+  background: var(--pd-surface-2);
+  border-radius: 0.35em;
+  overflow: hidden;
+  position: relative;
+}
+.pd-sysmon-fill {
+  height: 100%;
+  background: var(--pd-state-ok);
+  transition: width 0.4s ease, background-color 0.3s ease;
+}
+.pd-sysmon-fill-ok       { background: var(--pd-state-ok); }
+.pd-sysmon-fill-info     { background: var(--pd-state-info); }
+.pd-sysmon-fill-warning  { background: var(--pd-state-warning); }
+.pd-sysmon-fill-critical { background: var(--pd-state-critical); }
+.pd-sysmon-fill-unknown  { background: var(--pd-state-unknown); }
+
+.pd-sysmon-readout {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  color: var(--pd-muted);
+  white-space: nowrap;
+}
+
+.pd-sysmon-ups-status,
+.pd-sysmon-svc-status {
+  grid-column: 2 / span 2;
+  font-size: 0.92em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em;
+}
+.pd-sysmon-ups-status .pd-sysmon-readout,
+.pd-sysmon-svc-status code {
+  margin-left: 0;
+}
+.pd-sysmon-svc-status code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--pd-surface-2);
+  padding: 0.05em 0.35em;
+  border-radius: 0.25em;
+}
+
+.pd-sysmon-dot {
+  display: inline-block;
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: 50%;
+  background: var(--pd-state-unknown);
+  vertical-align: baseline;
+}
+.pd-sysmon-dot-ok       { background: var(--pd-state-ok); }
+.pd-sysmon-dot-info     { background: var(--pd-state-info); }
+.pd-sysmon-dot-warning  { background: var(--pd-state-warning); }
+.pd-sysmon-dot-critical { background: var(--pd-state-critical); }
+.pd-sysmon-dot-unknown  { background: var(--pd-state-unknown); }
+
+.pd-sysmon-loadavg {
+  margin: 0.4em 0 0.2em 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  color: var(--pd-muted);
+}
+
+.pd-sysmon-footer {
+  margin-top: 0.6em;
+  font-size: 0.84em;
+  color: var(--pd-muted);
+}
+
+.pd-sysmon-muted { color: var(--pd-muted); }
+
+/* ------------------ detail page ------------------ */
+
+.pd-sysmon-detail h3 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  border-bottom: 1px solid var(--pd-border);
+  padding-bottom: 0.2em;
+}
+.pd-sysmon-detail h4 {
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  font-size: 0.95em;
+  color: var(--pd-muted);
+}
+
+.pd-sysmon-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 1.05em;
+  margin: 0.5em 0;
+}
+.pd-sysmon-status-ok       { color: var(--pd-text); }
+.pd-sysmon-status-warning  { color: var(--pd-state-warning); }
+.pd-sysmon-status-critical { color: var(--pd-state-critical); }
+
+.pd-sysmon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.pd-sysmon-table th,
+.pd-sysmon-table td {
+  padding: 0.4em 0.6em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+  text-align: left;
+}
+.pd-sysmon-table thead th {
+  font-weight: 600;
+  color: var(--pd-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+.pd-sysmon-row-warning  { color: var(--pd-state-warning); }
+.pd-sysmon-row-critical { color: var(--pd-state-critical); }
+.pd-sysmon-row-unknown  { color: var(--pd-state-unknown); }
+
+.pd-sysmon-events code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--pd-surface-2);
+  padding: 0.05em 0.4em;
+  border-radius: 0.25em;
+}
+
+.pd-sysmon-raw {
+  margin-top: 1em;
+}
+.pd-sysmon-raw summary {
+  cursor: pointer;
+  color: var(--pd-muted);
+  font-size: 0.9em;
+}
+.pd-sysmon-raw pre {
+  background: var(--pd-surface-2);
+  padding: 0.6em 0.8em;
+  border-radius: 0.4em;
+  font-size: 0.82em;
+  overflow-x: auto;
+  max-height: 24em;
+}
+
+.pd-sysmon-spark {
+  display: inline-block;
+  width: 7.5em;
+  height: 1.5em;
+  vertical-align: middle;
+}
+.pd-sysmon-spark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .pd-sysmon-bar {
+    grid-template-columns: 4em 1fr auto;
+  }
+}

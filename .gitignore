@@ -1,0 +1,8 @@
+config.toml
+__pycache__/
+*.egg-info/
+*.pyc
+.venv/
+
+# Local-only docs
+docs/knowledge/
