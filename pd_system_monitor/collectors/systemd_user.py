@@ -29,6 +29,11 @@ class SystemdUserCollector:
         watchset: set[str] = set()
         if USER_UNIT_DIR.is_dir():
             for p in USER_UNIT_DIR.glob("*.service"):
+                # Skip masked units (symlink to /dev/null). Masking is a
+                # deliberate "never run this" — systemctl won't list it, so
+                # tracking it would always report it as missing/not-loaded.
+                if p.is_symlink() and p.readlink() == Path("/dev/null"):
+                    continue
                 watchset.add(p.name)
         for u in self._extras:
             watchset.add(u if u.endswith(".service") else f"{u}.service")
