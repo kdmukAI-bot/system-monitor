@@ -8,7 +8,17 @@ seconds = 5
 [thresholds]
 ram_warn_pct = 90
 ram_crit_pct = 95
-swap_warn_pct = 50
+# Memory-pressure alerting. Swap *occupancy* is intentionally NOT alerted on:
+# idle anonymous pages linger in swap for days on a long-uptime box with zero
+# performance cost. What matters is whether memory is actually stalling work.
+#   - PSI (/proc/pressure/memory) is the primary signal when available.
+#     warn: "some" avg60 >= N%  (≥1 task stalled on memory this fraction of 60s)
+#     crit: "full" avg60 >= N%  (ALL tasks stalled — system effectively frozen)
+#   - swap_io_warn_kbps is the fallback thrash trigger on kernels without PSI:
+#     sustained swap-OUT throughput (KiB/s) equivalent to vmstat's `so` column.
+mem_pressure_warn_pct = 20
+mem_pressure_crit_pct = 10
+swap_io_warn_kbps = 2048
 disk_warn_pct = 90
 disk_crit_pct = 95
 vram_warn_pct = 95

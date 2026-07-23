@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,11 @@ from .collectors.systemd_user import SystemdUserCollector
 from .collectors.ups import UpsCollector
 
 logger = logging.getLogger(__name__)
+
+try:
+    _PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
+except (AttributeError, ValueError, OSError):
+    _PAGE_SIZE = 4096
 
 _DATA_DIR = (
     Path.home() / ".local" / "share" / "personal-dashboard" / "modules" / "system-monitor"
@@ -100,7 +106,13 @@ class Monitor:
         thresholds = config.get("thresholds") or {}
         self._ram_warn = float(thresholds.get("ram_warn_pct", 90))
         self._ram_crit = float(thresholds.get("ram_crit_pct", 95))
-        self._swap_warn = float(thresholds.get("swap_warn_pct", 50))
+        # Swap *occupancy* is a poor health signal — idle anonymous pages sit in
+        # swap for days on a long-uptime box without any performance cost. We
+        # alert on actual memory *pressure* instead: kernel PSI stall time, with
+        # swap-I/O throughput as a fallback when PSI is unavailable.
+        self._mem_pressure_warn = float(thresholds.get("mem_pressure_warn_pct", 20))
+        self._mem_pressure_crit = float(thresholds.get("mem_pressure_crit_pct", 10))
+        self._swap_io_warn_kbps = float(thresholds.get("swap_io_warn_kbps", 2048))
         self._disk_warn = float(thresholds.get("disk_warn_pct", 90))
         self._disk_crit = float(thresholds.get("disk_crit_pct", 95))
         self._vram_warn = float(thresholds.get("vram_warn_pct", 95))
@@ -113,6 +125,9 @@ class Monitor:
         self._hyst_swap = _MetricHysteresis(sustained_seconds, tick_seconds)
         self._hyst_disk = _MetricHysteresis(sustained_seconds, tick_seconds)
         self._hyst_vram = _MetricHysteresis(sustained_seconds, tick_seconds)
+
+        # Previous swap-I/O sample for rate derivation: (monotonic, in_pages, out_pages).
+        self._prev_swap_io: tuple[float, int, int] | None = None
 
         ups_cfg = config.get("ups") or {}
         self._ups = UpsCollector(
@@ -179,7 +194,37 @@ class Monitor:
                 ram_raw_sev = "warning"
             ram_sev = self._hyst_ram.observe(ram_raw_sev)
 
-            swap_raw_sev = "warning" if swap_pct >= self._swap_warn else "ok"
+            # Derive swap-I/O throughput (KiB/s) by diffing cumulative page
+            # counters against the previous tick — the actual thrashing rate.
+            swap_io = sys_metrics.get("swap_io")
+            now_mono = sys_metrics["collected_at_monotonic"]
+            swap_in_kbps = swap_out_kbps = 0.0
+            if swap_io is not None:
+                if self._prev_swap_io is not None:
+                    prev_t, prev_in, prev_out = self._prev_swap_io
+                    dt = now_mono - prev_t
+                    if dt > 0:
+                        # max(0, ...) guards against counter resets (reboot).
+                        d_in = max(0, swap_io["in_pages"] - prev_in)
+                        d_out = max(0, swap_io["out_pages"] - prev_out)
+                        swap_in_kbps = d_in * _PAGE_SIZE / dt / 1024.0
+                        swap_out_kbps = d_out * _PAGE_SIZE / dt / 1024.0
+                self._prev_swap_io = (
+                    now_mono, swap_io["in_pages"], swap_io["out_pages"]
+                )
+
+            # Memory-pressure severity: prefer PSI (authoritative "is memory
+            # actually hurting" signal); fall back to swap-out throughput when
+            # PSI is unavailable. Swap occupancy % is displayed but never alerts.
+            mem_pressure = sys_metrics.get("mem_pressure")
+            swap_raw_sev = "ok"
+            if mem_pressure is not None:
+                if mem_pressure.get("full_avg60", 0.0) >= self._mem_pressure_crit:
+                    swap_raw_sev = "critical"
+                elif mem_pressure.get("some_avg60", 0.0) >= self._mem_pressure_warn:
+                    swap_raw_sev = "warning"
+            elif swap_out_kbps >= self._swap_io_warn_kbps:
+                swap_raw_sev = "warning"
             swap_sev = self._hyst_swap.observe(swap_raw_sev)
 
             disk_raw_sev = "ok"
@@ -212,18 +257,22 @@ class Monitor:
 
             now = datetime.now()
             summary = self._build_summary(
-                sys_metrics, gpu_metrics, ups_metrics, systemd_metrics
+                sys_metrics, gpu_metrics, ups_metrics, systemd_metrics,
+                swap_sev, swap_out_kbps,
             )
             detail = self._build_detail_text(
                 ram_sev, swap_sev, disk_sev, vram_sev,
                 ups_status_sev, ups_event_sev,
                 ups_metrics, systemd_metrics,
-                ram_pct, swap_pct, disk_pct, vram_pct,
+                ram_pct, disk_pct, vram_pct,
+                mem_pressure, swap_out_kbps,
             )
 
             data = {
                 "ram": sys_metrics["ram"],
                 "swap": sys_metrics["swap"],
+                "mem_pressure": mem_pressure,
+                "swap_io": {"in_kbps": swap_in_kbps, "out_kbps": swap_out_kbps},
                 "disk": sys_metrics["disk"],
                 "load_avg": sys_metrics["load_avg"],
                 "cpu_temp_c": sys_metrics["cpu_temp_c"],
@@ -242,7 +291,9 @@ class Monitor:
                 "thresholds": {
                     "ram_warn_pct": self._ram_warn,
                     "ram_crit_pct": self._ram_crit,
-                    "swap_warn_pct": self._swap_warn,
+                    "mem_pressure_warn_pct": self._mem_pressure_warn,
+                    "mem_pressure_crit_pct": self._mem_pressure_crit,
+                    "swap_io_warn_kbps": self._swap_io_warn_kbps,
                     "disk_warn_pct": self._disk_warn,
                     "disk_crit_pct": self._disk_crit,
                     "vram_warn_pct": self._vram_warn,
@@ -284,13 +335,17 @@ class Monitor:
     # Text builders
     # ------------------------------------------------------------------
 
-    def _build_summary(self, sys_m, gpu_m, ups_m, systemd_m) -> str:
+    def _build_summary(
+        self, sys_m, gpu_m, ups_m, systemd_m, swap_sev="ok", swap_out_kbps=0.0
+    ) -> str:
         parts: list[str] = []
         ram = sys_m["ram"]
         parts.append(
             f"RAM {ram['percent']:.0f}% ({_bytes_to_gib(ram['used_bytes']):.1f}/"
             f"{_bytes_to_gib(ram['total_bytes']):.1f} GiB)"
         )
+        if swap_sev != "ok":
+            parts.append(f"mem-pressure swap-out {swap_out_kbps:.0f} KiB/s")
         if gpu_m.get("gpus"):
             g = gpu_m["gpus"][0]
             parts.append(
@@ -316,13 +371,22 @@ class Monitor:
         self, ram_sev, swap_sev, disk_sev, vram_sev,
         ups_status_sev, ups_event_sev,
         ups_m, systemd_m,
-        ram_pct, swap_pct, disk_pct, vram_pct,
+        ram_pct, disk_pct, vram_pct,
+        mem_pressure, swap_out_kbps,
     ) -> str | None:
         problems: list[str] = []
         if ram_sev != "ok":
             problems.append(f"RAM {ram_pct:.0f}% (sustained)")
         if swap_sev != "ok":
-            problems.append(f"swap {swap_pct:.0f}%")
+            if mem_pressure is not None:
+                problems.append(
+                    "memory pressure (PSI some "
+                    f"{mem_pressure.get('some_avg60', 0.0):.0f}% / full "
+                    f"{mem_pressure.get('full_avg60', 0.0):.0f}% over 60s, "
+                    f"swap-out {swap_out_kbps:.0f} KiB/s)"
+                )
+            else:
+                problems.append(f"swap thrashing ({swap_out_kbps:.0f} KiB/s out)")
         if disk_sev != "ok":
             problems.append(f"disk {disk_pct:.0f}% used")
         if vram_sev != "ok":

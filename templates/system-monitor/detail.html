@@ -4,6 +4,8 @@
 {% set sev = data.severities %}
 {% set ram = data.ram %}
 {% set swap = data.swap %}
+{% set psi = data.mem_pressure %}
+{% set swap_io = data.swap_io %}
 {% set disk = data.disk %}
 {% set live = data.ups.live %}
 {% set sd = data.systemd %}
@@ -25,12 +27,25 @@
       <td>avail {{ '%.2f' % (ram.available_bytes / 1073741824) }} GiB</td>
       <td><span class="pd-sysmon-spark" data-metric="ram_pct"></span></td>
     </tr>
-    <tr class="pd-sysmon-row-{{ sev.swap }}">
+    <tr>
       <th>Swap</th>
       <td>{{ '%.1f' % swap.percent }}%</td>
       <td>{{ '%.2f' % (swap.used_bytes / 1073741824) }} / {{ '%.2f' % (swap.total_bytes / 1073741824) }} GiB</td>
-      <td></td>
+      <td class="pd-sysmon-muted">occupancy only — not alerted</td>
       <td><span class="pd-sysmon-spark" data-metric="swap_pct"></span></td>
+    </tr>
+    <tr class="pd-sysmon-row-{{ sev.swap }}">
+      <th>Mem pressure</th>
+      <td>
+        {% if psi %}PSI {{ '%.1f' % psi.some_avg60 }}%{% else %}—{% endif %}
+      </td>
+      <td>
+        {% if psi %}some {{ '%.1f' % psi.some_avg10 }}/{{ '%.1f' % psi.some_avg60 }} ·
+        full {{ '%.1f' % psi.full_avg10 }}/{{ '%.1f' % psi.full_avg60 }} (10s/60s)
+        {% else %}PSI unavailable{% endif %}
+      </td>
+      <td>swap I/O {{ '%.0f' % swap_io.in_kbps }}↓ / {{ '%.0f' % swap_io.out_kbps }}↑ KiB/s</td>
+      <td><span class="pd-sysmon-spark" data-metric="swap_io_out"></span></td>
     </tr>
   </table>
 

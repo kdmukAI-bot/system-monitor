@@ -19,6 +19,7 @@
   const METRIC_EXTRACTORS = {
     ram_pct: (d) => d?.data?.ram?.percent,
     swap_pct: (d) => d?.data?.swap?.percent,
+    swap_io_out: (d) => d?.data?.swap_io?.out_kbps,
     disk_pct: (d) => d?.data?.disk?.percent,
     vram_pct: (d) => {
       const gpus = d?.data?.gpu?.gpus;
